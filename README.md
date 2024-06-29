@@ -1,12 +1,12 @@
-# MyMod
+# BenchmarkStarter
 
-This is MyMod, a mod for Hitman 3!
+This mod will start directly into benchmark mode and press F11 key to start data provider capture.
 
 ## Installation Instructions
 
-1. Download the latest version of [ZHMModSDK](https://github.com/OrfeasZ/ZHMModSDK) and install it.
-2. Download the latest version of `MyMod` and copy it to the ZHMModSDK `mods` folder (e.g. `C:\Games\HITMAN 3\Retail\mods`).
-3. Run the game and once in the main menu, press the `~` key (`^` on QWERTZ layouts) and enable `MyMod` from the menu at the top of the screen (you may need to restart your game afterwards).
+1. Download the latest version of [ZHMModSDK](https://github.com/OrfeasZ/ZHMModSDK/releases/latest) and install it.
+2. Download the latest version of [BenchmarkStarter](https://github.com/illusion0001/Hitman3-Benchmark/releases/latest) and copy it to the ZHMModSDK `mods` folder (e.g. `C:\Games\HITMAN 3\Retail\mods`).
+3. Run the game and once in the main menu, press the `~` key (`^` on QWERTZ layouts) and enable `BenchmarkStarter` from the menu at the top of the screen (you may need to restart your game afterwards).
 4. Enjoy!
 
 ## Building
