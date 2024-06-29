@@ -1,27 +1,31 @@
-name: Build
+name: Build Mods
 
-on:
-  push:
-    branches:
-      - master
-  release:
-    types: [ created ]
-  pull_request:
-    types: [ opened, synchronize, reopened ]
+on: [ push, pull_request, workflow_dispatch ]
 
 jobs:
   build:
     name: Build
-    runs-on: [ windows-latest ]
+    runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Get latest CMake and ninja
       uses: lukka/get-cmake@latest
 
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@main
       with:
         submodules: recursive
+        fetch-depth: 0
+
+    - name: Setup variables
+      run: |
+        $_ver = "$(git rev-list HEAD --count)-$(git rev-parse --short=8 HEAD)"
+        $_name = "$(Split-Path -Path $pwd -Leaf)-$_ver"
+        echo "commit_ver=$_name" >> "$Env:GITHUB_ENV"
+        echo "arc_name=$_name" >> "$Env:GITHUB_ENV"
+        echo "arc_path=${{ github.workspace }}\$_name.zip" >> "$Env:GITHUB_ENV"
 
     - name: Setup VS environment
       uses: ilammy/msvc-dev-cmd@v1
@@ -53,65 +57,36 @@ jobs:
         Copy-Item LICENSE -Destination _dist-release/LICENSE
 
     - name: Archive debug
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@main
       with:
         name: MyMod-Debug
         path: _dist-debug/*
 
     - name: Archive release
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@main
       with:
         name: MyMod-Release
         path: _dist-release/*
 
-  upload_release:
-    name: Upload release artifacts
-    needs: build
-    if: github.event_name == 'release'
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Download debug artifact
-      uses: actions/download-artifact@v2
-      with:
-        name: MyMod-Debug
-        path: MyMod-Debug
-
-    - name: Download release artifact
-      uses: actions/download-artifact@v2
-      with:
-        name: MyMod-Release
-        path: MyMod-Release
-
-    - name: Archive artifact files
+    - name: Zip files
+      if: github.event_name == 'workflow_dispatch'
       run: |
-        cd MyMod-Debug
-        zip -r MyMod-Debug.zip *
-        cd ../MyMod-Release
-        zip -r MyMod-Release.zip *
-        
-    - name: Get release
-      id: get_release
-      uses: bruceadams/get-release@v1.2.2
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
+        $compress = @{
+          Path = "_dist-debug"
+          CompressionLevel = "Optimal"
+          DestinationPath = "${{ env.arc_name }}-Debug.zip"
+        }
+        Compress-Archive @compress
 
-    - name: Upload debug assets
-      uses: actions/upload-release-asset@v1
+        $compress = @{
+          Path = "_dist-release"
+          CompressionLevel = "Optimal"
+          DestinationPath = "${{ env.arc_name }}-Release.zip"
+        }
+        Compress-Archive @compress
+
+    - name: Create Release
+      if: github.event_name == 'workflow_dispatch'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.get_release.outputs.upload_url }}
-        asset_path: MyMod-Debug/MyMod-Debug.zip
-        asset_name: MyMod-Debug.zip
-        asset_content_type: application/zip
-
-    - name: Upload release assets
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.get_release.outputs.upload_url }}
-        asset_path: MyMod-Release/MyMod-Release.zip
-        asset_name: MyMod-Release.zip
-        asset_content_type: application/zip
+      run: gh release create "${{ env.commit_ver }}" "${{ env.arc_name }}-Release.zip" "${{ env.arc_name }}-Debug.zip" --target ${{ GITHUB.SHA }} -t "${{ env.commit_ver }}" || Write-Output "::warning::Upload failed but build completed."; true
