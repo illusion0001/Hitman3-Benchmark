@@ -7,13 +7,15 @@
 #include <Glacier/ZGameLoopManager.h>
 #include <Glacier/ZScene.h>
 
+#include "Asm.h"
+
 // CSGOSimple's pattern scan
 // https://github.com/OneshotGH/CSGOSimple-master/blob/master/CSGOSimple/helpers/utils.cpp
 std::uint8_t* PatternScan(void* module, const char* signature)
 {
     static auto pattern_to_byte = [](const char* pattern)
         {
-            auto bytes = std::vector<int>{};
+            auto bytes = std::vector<int> {};
             auto start = const_cast<char*>(pattern);
             auto end = const_cast<char*>(pattern) + strlen(pattern);
 
@@ -116,25 +118,6 @@ void* DetourFunction64(void* pSource, void* pDestination, DWORD dwLen)
     return pSource;
 }
 
-uintptr_t ArgsCmdLineOverride_Return = 0;
-uintptr_t ArgsCmdLineOverride_OrignalFunc = 0;
-
-static const wchar_t* readCMDLine()
-{
-    return L"-ao BENCHMARK_SCENE_INDEX 2 -ao AUTO_QUIT_ENGINE 120 -ao START_BENCHMARK 1 ConsoleCmd UI_ShowProfileData 1 ConsoleCmd UI_ShowProfileStats 1";
-}
-
-static void __attribute__((naked)) ArgsCmdLineOverrideAsm()
-{
-    __asm
-    {
-        call qword ptr[rip + ArgsCmdLineOverride_OrignalFunc];
-        call readCMDLine;
-        mov r12, rax;
-        jmp qword ptr[rip + ArgsCmdLineOverride_Return];
-    }
-}
-
 uintptr_t ReadLEA32(uintptr_t Address, size_t offset, size_t lea_size, size_t lea_opcode_size)
 {
     uintptr_t Address_Result = Address;
@@ -191,7 +174,7 @@ void BenchmarkStarter::Init()
                     void* jumpPattern = (void*)PatternScan(m_gameBase, "CC CC CC CC CC CC CC CC CC CC CC CC CC CC");
                     // Call this then override the R12 with our commandline.txt data
                     DetourFunction32((void*)overrideCMDline, jumpPattern, 5);
-                    DetourFunction64(jumpPattern, (void*)ArgsCmdLineOverrideAsm, 14);
+                    DetourFunction64(jumpPattern, (void*)&ArgsCmdLineOverrideAsm, 14);
                     wprintf_s(L"installed override cmdline parser.\n");
                 }
                 m_WantedBenchmark = true;
@@ -233,7 +216,7 @@ void BenchmarkStarter::OnDrawUI(bool p_HasFocus)
 
 void SendInputWrapper(WORD inputKey)
 {
-    INPUT inputs[2]{};
+    INPUT inputs[2] {};
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = inputKey;
     inputs[1].type = INPUT_KEYBOARD;

@@ -17,7 +17,7 @@ set(CMAKE_CXX_STANDARD 23)
 add_library(BenchmarkStarter SHARED
     src/BenchmarkStarter.cpp
     src/BenchmarkStarter.h
-)
+ "src/Asm.cpp" "src/Asm.h")
 
 # Add SDK and DX headers dependencies.
 find_package(directx-headers CONFIG REQUIRED)
