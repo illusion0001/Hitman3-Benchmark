@@ -50,6 +50,7 @@ private:
     bool m_WantedBenchmark = false;
     bool m_ModuleStarted = false;
     bool m_BenchmarkCompleted = false;
+    double m_TimeToQuit = 0;
 };
 
 DEFINE_ZHM_PLUGIN(BenchmarkStarter)

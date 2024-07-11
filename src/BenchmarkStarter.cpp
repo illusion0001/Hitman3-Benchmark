@@ -1,3 +1,9 @@
+// Cmake `set` isn't working for some reason
+#define _UNICODE
+#define UNICODE
+
+#include <yaml-cpp/yaml.h>
+
 #include "BenchmarkStarter.h"
 
 #include <Logging.h>
@@ -8,6 +14,249 @@
 #include <Glacier/ZScene.h>
 
 #include "Asm.h"
+
+#include <shlobj.h>
+#include <strsafe.h>
+#include <io.h>
+#include <filesystem>
+
+#define PROJECT_NAME "BenchmarkStarter"
+#define BENCHMARK_PATH_DEFAULT "C:\\benchmarking\\Hitman3"
+
+bool bBenchmarkingOnly = true;
+bool createdConfigQuit {};
+
+// Benchmark config index
+size_t iBenchmarkIndex {};
+size_t iBenchmarkSize {};
+
+std::filesystem::path config_path = PROJECT_NAME ".yaml";
+std::filesystem::path index_path = PROJECT_NAME ".index.yaml";
+
+std::filesystem::path currentDir {};
+std::string currentConfigPath {};
+std::string currentConfigPathFileName {};
+std::filesystem::path fs_currentConfigPath {};
+const char* pCurrentConfigPath {};
+
+static void saveIndex(size_t index, const std::string& indexFile)
+{
+    YAML::Emitter out;
+    out << YAML::BeginMap;
+    out << YAML::Key << "BenchmarkIndex" << YAML::Value << YAML::BeginMap;
+    out << YAML::Key << "index" << YAML::Value << index;
+    out << YAML::EndMap;
+    out << YAML::EndMap;
+    std::ofstream fout(indexFile);
+    fout << out.c_str();
+    fout << "\n";
+    fout.close();
+}
+
+static void RestartApp()
+{
+    STARTUPINFO startinfo {};
+    PROCESS_INFORMATION processinfo {};
+    std::wstring path = currentDir.native();
+    if (!CreateProcess(
+        L"HITMAN3.exe",
+        GetCommandLine(),
+        NULL,
+        NULL,
+        FALSE,
+        0,
+        NULL,
+        path.c_str(),
+        &startinfo,
+        &processinfo))
+    {
+        wprintf_s(L"CreateProcess(%s) failed %d\n", GetCommandLine(), GetLastError());
+        MessageBox(0, L"Failed to create process. Application may not restart.", L"" PROJECT_NAME, MB_ICONERROR | MB_OK);
+    }
+    else
+    {
+        ExitProcess(0);
+    }
+}
+
+static void SaveIndexInc()
+{
+    if (std::ifstream(index_path))
+    {
+        YAML::Node indexNode = YAML::LoadFile(index_path.string());
+        iBenchmarkIndex++;
+        indexNode["BenchmarkIndex"]["index"] = iBenchmarkIndex;
+        saveIndex(iBenchmarkIndex, index_path.string());
+    }
+    else
+    {
+        MessageBox(0, L"File not found", L"", 0);
+    }
+}
+
+static void SaveIndexRestart()
+{
+    SaveIndexInc();
+    RestartApp();
+}
+
+static void ReadConfig()
+{
+    currentDir = std::filesystem::current_path();
+    {
+        std::filesystem::path cfgPath = currentDir / config_path;
+        index_path = currentDir / index_path;
+        std::ifstream yamlFile(cfgPath);
+        if (!yamlFile)
+        {
+            YAML::Emitter out;
+            out << YAML::BeginMap;
+            out << YAML::Key << "ConfigPath" << YAML::Value << YAML::BeginSeq;            out << YAML::Comment(
+                "Path to save file must be absolute path and no quotation marks.\n"
+                "(i.e " BENCHMARK_PATH_DEFAULT "\\Hitman3_720p.reg = good)\n"
+                "(But \"" BENCHMARK_PATH_DEFAULT "\\Hitman3_720p.reg\" = bad)"
+            );
+            out << BENCHMARK_PATH_DEFAULT "\\Hitman3_720p.reg";
+            out << BENCHMARK_PATH_DEFAULT "\\Hitman3_1080p.reg";
+            out << BENCHMARK_PATH_DEFAULT "\\Hitman3_1440p.cfg";
+            out << BENCHMARK_PATH_DEFAULT "\\Hitman3_2160p.cfg";
+            out << YAML::EndSeq;
+            out << YAML::EndMap;
+            std::ofstream yamlFileOut(config_path);
+            yamlFileOut << out.c_str();
+            yamlFileOut << "\n";
+            {
+                wchar_t msg[512] {};
+                _snwprintf_s(msg, _countof(msg), L"Created patch config file at \"%s\". Application will now quit for user to adjust file.", cfgPath.u16string().c_str());
+                MessageBox(0, msg, L"" PROJECT_NAME, MB_ICONINFORMATION | MB_OK);
+                createdConfigQuit = true;
+            }
+            return;
+        }
+    }
+    wprintf_s(L"Current directory: %s\n", currentDir.c_str());
+    YAML::Node config = YAML::LoadFile(config_path.string());
+    YAML::Node indexNode;
+    if (std::ifstream(index_path))
+    {
+        indexNode = YAML::LoadFile(index_path.string());
+    }
+    else
+    {
+        indexNode["BenchmarkIndex"]["index"] = 0;
+        saveIndex(0, index_path.string());
+    }
+    {
+        if (config["ConfigPath"])
+        {
+            iBenchmarkSize = config["ConfigPath"].size();
+            iBenchmarkIndex = indexNode["BenchmarkIndex"]["index"].as<size_t>();
+            if (iBenchmarkIndex >= iBenchmarkSize)
+            {
+                iBenchmarkIndex = 0;
+                int retID = MessageBox(0,
+                    L"Benchmark Completed.\n"
+                    "Do you want to start game or quit?\n"
+                    "Starting game will not load into benchmark but config file will remain the same.",
+                    L"" PROJECT_NAME, MB_YESNO | MB_ICONWARNING);
+                switch (retID)
+                {
+                    case IDYES:
+                    {
+                        bBenchmarkingOnly = false;
+                        saveIndex(0, index_path.string());
+                        break;
+                    }
+                    case IDNO:
+                    {
+                        saveIndex(0, index_path.string());
+                        ExitProcess(0);
+                        break;
+                    }
+                }
+            }
+            currentConfigPath = config["ConfigPath"][iBenchmarkIndex].as<std::string>();
+            fs_currentConfigPath = currentConfigPath;
+            currentConfigPathFileName = fs_currentConfigPath.stem().string();
+            pCurrentConfigPath = currentConfigPath.c_str();
+
+            if (!fs_currentConfigPath.empty())
+            {
+                errno_t cfg_ret = _access_s(currentConfigPath.c_str(), 0);
+                if (cfg_ret)
+                {
+                    wchar_t msg[512] {};
+                    _snwprintf_s(msg, _countof(msg), L"One or more requested files does not exist.\n"
+                        "Config file: %hs (%s)",
+                        currentConfigPath.c_str(),
+                        cfg_ret == ENOENT ? L"not found" : L"exists");
+                    MessageBox(0, msg, L"" PROJECT_NAME " Startup Error", MB_OK | MB_ICONERROR);
+                    createdConfigQuit = true;
+                    return;
+                }
+                else
+                {
+                    wchar_t cmd[320] {};
+                    _snwprintf_s(cmd, _countof(cmd), L"reg import \"%hs\"", currentConfigPath.c_str());
+                    wprintf_s(L"Running cmd: %s\n", cmd);
+                    STARTUPINFO startinfo {};
+                    PROCESS_INFORMATION processinfo {};
+                    if (!CreateProcess(
+                        NULL,
+                        cmd,
+                        NULL,
+                        NULL,
+                        FALSE,
+                        0,
+                        NULL,
+                        NULL,
+                        &startinfo,
+                        &processinfo))
+                    {
+                        wchar_t msg[128] {};
+                        _snwprintf_s(msg, _countof(msg), L"CreateProcess failed %d\n", GetLastError());
+                        MessageBox(0, msg, L"" PROJECT_NAME " Startup Error", MB_ICONERROR | MB_OK);
+                    }
+                    wchar_t docuementPath[_MAX_PATH] {};
+                    // I find this funny
+                    // #define CSIDL_MYDOCUMENTS CSIDL_PERSONAL //  Personal was just a silly name for My Documents
+                    HRESULT result = SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, docuementPath);
+                    if (SUCCEEDED(result))
+                    {
+                        wchar_t CX_Path[_MAX_PATH] {};
+                        StringCchCat(CX_Path, _countof(CX_Path), docuementPath);
+                        StringCchCat(CX_Path, _countof(CX_Path), L"\\CapFrameX\\Profile.txt");
+                        HANDLE fd = CreateFile(CX_Path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                        if (fd == INVALID_HANDLE_VALUE)
+                        {
+                            wchar_t msg[512] {};
+                            _snwprintf_s(msg, _countof(msg), L"Unable to create file %s because handle was invalid. (0x%08x)", CX_Path, fd);
+                            MessageBox(0, msg, L"" PROJECT_NAME " Startup Error", MB_ICONERROR | MB_OK);
+                        }
+                        else
+                        {
+                            DWORD dwBytesWritten = 0;
+                            std::string fileData = currentConfigPathFileName + "\n";
+                            if (!WriteFile(fd, fileData.c_str(), fileData.length(), &dwBytesWritten, 0))
+                            {
+                                MessageBox(0, L"Failed to write profile name.\nFile name might be wrong after captures.", L"" PROJECT_NAME " Startup Error", MB_ICONERROR | MB_OK);
+                            }
+                            else
+                            {
+                                CloseHandle(fd);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            MessageBox(0, L"ConfigPath not found in YAML file", L"" PROJECT_NAME " Startup Error", MB_OK | MB_ICONERROR);
+            ExitProcess(1);
+        }
+    }
+}
 
 // CSGOSimple's pattern scan
 // https://github.com/OneshotGH/CSGOSimple-master/blob/master/CSGOSimple/helpers/utils.cpp
@@ -150,6 +399,16 @@ void BenchmarkStarter::Init()
     {
         return;
     }
+    ReadConfig();
+    if (createdConfigQuit)
+    {
+        ExitProcess(0);
+        return;
+    }
+    if (!bBenchmarkingOnly)
+    {
+        return;
+    }
     // Find `ZMicroprofileUIController`
     m_gameBase = GetModuleHandle(NULL);
     if (m_gameBase)
@@ -229,6 +488,12 @@ void BenchmarkStarter::OnFrameUpdate(const SGameUpdateEvent& p_UpdateEvent)
 {
     if (m_BenchmarkCompleted)
     {
+        m_TimeToQuit += p_UpdateEvent.m_GameTimeDelta.ToSeconds();
+    }
+    // want to restart game ourselves
+    if (m_TimeToQuit > 4.0)
+    {
+        SaveIndexRestart();
         return;
     }
     // This function is called every frame while the game is in play mode.

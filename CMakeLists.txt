@@ -21,11 +21,13 @@ add_library(BenchmarkStarter SHARED
 
 # Add SDK and DX headers dependencies.
 find_package(directx-headers CONFIG REQUIRED)
+find_package(yaml-cpp CONFIG REQUIRED)
 
 target_link_libraries(BenchmarkStarter
     ZHMModSDK
     Microsoft::DirectX-Guids
     Microsoft::DirectX-Headers
+    yaml-cpp::yaml-cpp
 )
 
 install(TARGETS BenchmarkStarter
