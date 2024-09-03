@@ -100,6 +100,32 @@ static void SaveIndexRestart()
     RestartApp();
 }
 
+#define CHECK_FILE "C:\\benchmarking\\check.txt"
+
+static void CheckScriptFile()
+{
+    BOOL check = GetFileAttributes(TEXT(CHECK_FILE)) != INVALID_FILE_ATTRIBUTES;
+    if (!check)
+    {
+        HANDLE fd = CreateFile(TEXT(CHECK_FILE), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (fd == INVALID_HANDLE_VALUE)
+        {
+            return;
+        }
+        else
+        {
+            const wchar_t* default_ini = L"Example file created by patch\n";
+            DWORD dwBytesWritten = 0;
+            WriteFile(fd,
+                default_ini,
+                (wcslen(default_ini) * sizeof(wchar_t)),
+                &dwBytesWritten,
+                0);
+            CloseHandle(fd);
+        }
+    }
+}
+
 static void ReadConfig()
 {
     currentDir = std::filesystem::current_path();
@@ -153,6 +179,8 @@ static void ReadConfig()
             iBenchmarkIndex = indexNode["BenchmarkIndex"]["index"].as<size_t>();
             if (iBenchmarkIndex >= iBenchmarkSize)
             {
+                saveIndex(0, index_path.string());
+                CheckScriptFile();
                 iBenchmarkIndex = 0;
                 int retID = MessageBox(0,
                     L"Benchmark Completed.\n"
@@ -164,12 +192,10 @@ static void ReadConfig()
                     case IDYES:
                     {
                         bBenchmarkingOnly = false;
-                        saveIndex(0, index_path.string());
                         break;
                     }
                     case IDNO:
                     {
-                        saveIndex(0, index_path.string());
                         ExitProcess(0);
                         break;
                     }
