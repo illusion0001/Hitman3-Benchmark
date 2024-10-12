@@ -24,6 +24,7 @@
 #define BENCHMARK_PATH_DEFAULT "C:\\benchmarking\\Hitman3"
 
 bool bBenchmarkingOnly = true;
+int iRestartTimer {};
 bool createdConfigQuit {};
 
 // Benchmark config index
@@ -53,8 +54,27 @@ static void saveIndex(size_t index, const std::string& indexFile)
     fout.close();
 }
 
+static void RestartAppSteamTimer(int appid, int timer)
+{
+#define CMD_FILE "restart.bat"
+    FILE* batch = NULL;
+    errno_t err = _wfopen_s(&batch, TEXT(CMD_FILE), L"w");
+    if (!err && batch)
+    {
+        fwprintf_s(batch, L"timeout /t %d /nobreak\n", timer);
+        fwprintf_s(batch, L"start steam://run/%d\n", appid);
+        fclose(batch);
+        ShellExecute(NULL, NULL, TEXT(CMD_FILE), NULL, NULL, SW_SHOWNORMAL);
+        ExitProcess(0);
+    }
+#undef CMD_FILE
+}
+
 static void RestartApp()
 {
+#if 1
+    RestartAppSteamTimer(1659040, iRestartTimer);
+#else
     STARTUPINFO startinfo {};
     PROCESS_INFORMATION processinfo {};
     std::wstring path = currentDir.native();
@@ -77,6 +97,7 @@ static void RestartApp()
     {
         ExitProcess(0);
     }
+#endif
 }
 
 static void SaveIndexInc()
@@ -137,6 +158,11 @@ static void ReadConfig()
         {
             YAML::Emitter out;
             out << YAML::BeginMap;
+            out << YAML::Key << "Settings" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "iRestartTimer" << YAML::Value << 30;
+            out << YAML::EndMap;
+            out << YAML::Newline;
+            out << YAML::Comment("Input path must be absolute path and no quotation marks around it.");
             out << YAML::Key << "ConfigPath" << YAML::Value << YAML::BeginSeq;            out << YAML::Comment(
                 "Path to save file must be absolute path and no quotation marks.\n"
                 "(i.e " BENCHMARK_PATH_DEFAULT "\\Hitman3_720p.reg = good)\n"
@@ -173,6 +199,10 @@ static void ReadConfig()
         saveIndex(0, index_path.string());
     }
     {
+        if (config["Settings"])
+        {
+            iRestartTimer = config["Settings"]["iRestartTimer"].as<int>(30);
+        }
         if (config["ConfigPath"])
         {
             iBenchmarkSize = config["ConfigPath"].size();
