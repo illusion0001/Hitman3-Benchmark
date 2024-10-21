@@ -24,6 +24,7 @@
 #define BENCHMARK_PATH_DEFAULT "C:\\benchmarking\\Hitman3"
 
 bool bBenchmarkingOnly = true;
+extern int bWantGPUBenchmark;
 int iRestartTimer {};
 bool createdConfigQuit {};
 
@@ -160,6 +161,7 @@ static void ReadConfig()
             out << YAML::BeginMap;
             out << YAML::Key << "Settings" << YAML::Value << YAML::BeginMap;
             out << YAML::Key << "iRestartTimer" << YAML::Value << 30;
+            out << YAML::Key << "bWantGPUBenchmark" << YAML::Value << false;
             out << YAML::EndMap;
             out << YAML::Newline;
             out << YAML::Comment("Input path must be absolute path and no quotation marks around it.");
@@ -202,7 +204,10 @@ static void ReadConfig()
         if (config["Settings"])
         {
             iRestartTimer = config["Settings"]["iRestartTimer"].as<int>(30);
+            bWantGPUBenchmark = config["Settings"]["bWantGPUBenchmark"].as<bool>(false);
         }
+        wprintf_s(L"iRestartTimer: %d\n", iRestartTimer);
+        wprintf_s(L"bWantGPUBenchmark: %s\n", bWantGPUBenchmark ? L"true" : L"false");
         if (config["ConfigPath"])
         {
             iBenchmarkSize = config["ConfigPath"].size();
@@ -292,7 +297,7 @@ static void ReadConfig()
                         else
                         {
                             DWORD dwBytesWritten = 0;
-                            std::string fileData = currentConfigPathFileName + "\n";
+                            std::string fileData = (bWantGPUBenchmark ? "GPU_" : "CPU_") + currentConfigPathFileName + "\n";
                             if (!WriteFile(fd, fileData.c_str(), fileData.length(), &dwBytesWritten, 0))
                             {
                                 MessageBox(0, L"Failed to write profile name.\nFile name might be wrong after captures.", L"" PROJECT_NAME " Startup Error", MB_ICONERROR | MB_OK);
