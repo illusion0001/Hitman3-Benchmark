@@ -536,13 +536,21 @@ void BenchmarkStarter::OnDrawUI(bool p_HasFocus)
 
 void SendInputWrapper(WORD inputKey)
 {
-    INPUT inputs[2] {};
+    INPUT inputs[1] {};
+    const LPARAM Extras = GetMessageExtraInfo();
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = inputKey;
+    inputs[0].ki.dwExtraInfo = Extras;
+    /*
     inputs[1].type = INPUT_KEYBOARD;
     inputs[1].ki.wVk = inputKey;
     inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput((sizeof(inputs) / sizeof(inputs[0])), inputs, sizeof(INPUT));
+    */
+    SendInput(_countof(inputs), inputs, sizeof(INPUT));
+    Sleep(16); // huh? this worksaround frameview not picking up our input
+    inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(_countof(inputs), inputs, sizeof(INPUT));
 }
 
 void BenchmarkStarter::OnFrameUpdate(const SGameUpdateEvent& p_UpdateEvent)
