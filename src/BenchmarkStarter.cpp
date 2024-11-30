@@ -22,10 +22,14 @@
 
 #define PROJECT_NAME "BenchmarkStarter"
 #define BENCHMARK_PATH_DEFAULT "C:\\benchmarking\\Hitman3"
+// helper macros
+#define GET_KEY_FMT(key, section, as_type, default_, fmt) key = config[section][#key].as<as_type>(default_); printf_s("" #key ": " fmt "\n", key)
+#define GET_KEY_BOOL(key, section ,as_type ,default_) key = config[section][#key].as<as_type>(default_); printf_s("" #key ": %s\n", key ? "true" : "false")
+#define ADD_YAML_KEY(emit, key, val) (void)key; emit << YAML::Key << #key << YAML::Value << val; printf_s("Adding `" #key "` with value `" #val "`\n")
 
 bool bBenchmarkingOnly = true;
 extern int bWantGPUBenchmark;
-int iRestartTimer {};
+int iRestartTimer {}, iSendInputAPIDelayMs {}, iBenchmarkKey {};
 bool createdConfigQuit {};
 
 // Benchmark config index
@@ -160,8 +164,18 @@ static void ReadConfig()
             YAML::Emitter out;
             out << YAML::BeginMap;
             out << YAML::Key << "Settings" << YAML::Value << YAML::BeginMap;
+            /*
             out << YAML::Key << "iRestartTimer" << YAML::Value << 30;
             out << YAML::Key << "bWantGPUBenchmark" << YAML::Value << false;
+            */
+            ADD_YAML_KEY(out, iRestartTimer, 30);
+            ADD_YAML_KEY(out, iBenchmarkKey, VK_F11); 
+            out << YAML::Comment(
+                "See VK codes https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes for valid keys codes\n"
+                "122 is F11 by default");
+            ADD_YAML_KEY(out, iSendInputAPIDelayMs, 16);
+            out << YAML::Comment("Delay for between Pressing and Releasing Keys, try higher values if data provider doesn't detect key");
+            ADD_YAML_KEY(out, bWantGPUBenchmark, false);
             out << YAML::EndMap;
             out << YAML::Newline;
             out << YAML::Comment("Input path must be absolute path and no quotation marks around it.");
@@ -203,11 +217,11 @@ static void ReadConfig()
     {
         if (config["Settings"])
         {
-            iRestartTimer = config["Settings"]["iRestartTimer"].as<int>(30);
-            bWantGPUBenchmark = config["Settings"]["bWantGPUBenchmark"].as<bool>(false);
+            GET_KEY_FMT(iRestartTimer, "Settings", int, 30, "%d");
+            GET_KEY_FMT(iBenchmarkKey, "Settings", int, VK_F11, "%d");
+            GET_KEY_FMT(iSendInputAPIDelayMs, "Settings", int, 16, "%d");
+            GET_KEY_BOOL(bWantGPUBenchmark, "Settings", bool, false);
         }
-        wprintf_s(L"iRestartTimer: %d\n", iRestartTimer);
-        wprintf_s(L"bWantGPUBenchmark: %s\n", bWantGPUBenchmark ? L"true" : L"false");
         if (config["ConfigPath"])
         {
             iBenchmarkSize = config["ConfigPath"].size();
@@ -548,7 +562,7 @@ void SendInputWrapper(WORD inputKey)
     SendInput((sizeof(inputs) / sizeof(inputs[0])), inputs, sizeof(INPUT));
     */
     SendInput(_countof(inputs), inputs, sizeof(INPUT));
-    Sleep(16); // huh? this worksaround frameview not picking up our input
+    Sleep(iSendInputAPIDelayMs); // huh? this worksaround frameview not picking up our input
     inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(_countof(inputs), inputs, sizeof(INPUT));
 }
@@ -572,12 +586,12 @@ void BenchmarkStarter::OnFrameUpdate(const SGameUpdateEvent& p_UpdateEvent)
         {
             if (!m_BenchAlreadyStarted)
             {
-                SendInputWrapper(VK_F11);
+                SendInputWrapper(iBenchmarkKey);
                 m_BenchAlreadyStarted = true;
             }
             if (m_pUIController[0]->BenchCompletedFlag != 0x40000000 && !m_BenchmarkCompleted)
             {
-                SendInputWrapper(VK_F11);
+                SendInputWrapper(iBenchmarkKey);
                 m_BenchmarkCompleted = true;
             }
         }
